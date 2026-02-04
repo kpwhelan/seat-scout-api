@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\RegisterRequest;
+use App\Http\Requests\Api\Auth\RegisterRequest;
+use App\Http\Requests\Api\Auth\LoginRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
@@ -19,7 +20,8 @@ class AuthController extends Controller {
         $user->password = Hash::make($data['password']);
         $user->save();
 
-        $token = $user->createToken('authToken')->plainTextToken;
+        $device_name = $data['device_name'] ?? $request->userAgent() ?? 'mobile';
+        $token = $user->createToken($device_name)->plainTextToken;
 
         return $this->success(
             data: [
@@ -29,6 +31,32 @@ class AuthController extends Controller {
             ],
             message: "Registered successfully",
             status: 201
+        );
+    }
+
+    public function login(LoginRequest $request) {
+        $data = $request->validated();
+
+        $user = User::where('email', $data['email'])->first();
+
+        if (!$user || !Hash::check($data['password'], $user->password)) {
+            return $this->error(
+                message: 'Invalid email or password',
+                status: 401
+            );
+        }
+
+        $device_name = $data['device_name'] ?? $request->userAgent() ?? 'mobile';
+        $user->tokens()->where('name', $device_name)->delete();
+        $token = $user->createToken($device_name)->plainTextToken;
+
+        return $this->success(
+            data: [
+                'user' => new UserResource($user),
+                'authToken' => $token,
+                'tokenType' => 'Bearer',
+            ],
+            message: 'Logged in successfully'
         );
     }
 }
